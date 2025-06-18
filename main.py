@@ -28,7 +28,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_content = await file.download_as_bytearray()
 
     try:
-        df = pd.read_csv(BytesIO(file_content))
+        df = pd.read_csv(
+            BytesIO(file_content),
+            quotechar='"',
+            escapechar='\\',
+            on_bad_lines='warn'
+        )
 
         # Фільтруємо лише поповнення "Від:"
         df = df[df["Додаткова інформація"].str.contains("Від:", na=False)].copy()
