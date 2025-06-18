@@ -5,6 +5,7 @@ from telegram import Update, Document
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from io import BytesIO
 
+
 # Налаштування логування
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -54,7 +55,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(MessageHandler(filters.Document.FILE_EXTENSION == "csv", handle_document))
+    app.add_handler(
+        MessageHandler(
+            filters.Document.ALL & filters.Regex(r"\.csv$"),
+            handle_document
+        )
+    )
 
     print("Бот запущено...")
     app.run_polling()
