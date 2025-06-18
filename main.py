@@ -54,7 +54,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(MessageHandler(filters.Document.FILE_EXTENSION("csv"), handle_document))
+    app.add_handler(MessageHandler(filters.Document.FILE_EXTENSION == "csv", handle_document))
 
     print("Бот запущено...")
     app.run_polling()
