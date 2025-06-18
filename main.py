@@ -1,6 +1,7 @@
 # main.py
 import logging
 import pandas as pd
+import csv
 from telegram import Update, Document
 from telegram.ext import (
     ApplicationBuilder,
@@ -8,7 +9,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from io import BytesIO
+from io import BytesIO, StringIO
 
 # Logging setup
 logging.basicConfig(
@@ -27,24 +28,24 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         decoded = file_content.decode("utf-8")
         lines = decoded.splitlines()
+        reader = csv.reader(lines, quotechar='"', escapechar='\\')
 
-        # Виділяємо заголовок окремо
-        header = lines[0]
-        expected_columns = header.count(',') + 1
+        header = next(reader)
+        expected_columns = len(header)
 
+        good_lines = [header]
         bad_donations = []
 
-        for i, line in enumerate(lines[1:], start=2):
-            if line.count(',') + 1 != expected_columns:
-                if 'Від:' in line:
-                    bad_donations.append(f"{i}: {line}")
+        for i, row in enumerate(reader, start=2):
+            if len(row) == expected_columns:
+                good_lines.append(row)
+            else:
+                raw_line = lines[i - 1]
+                if 'Від:' in raw_line:
+                    bad_donations.append(f"{i}: {raw_line}")
 
-        df = pd.read_csv(
-            BytesIO(file_content),
-            quotechar='"',
-            escapechar='\\',
-            on_bad_lines='warn'
-        )
+        # Створюємо DataFrame з валідних рядків
+        df = pd.DataFrame(good_lines[1:], columns=good_lines[0])
 
         df = df[df["Додаткова інформація"].str.contains("Від:", na=False)].copy()
         df["Донатор"] = df["Додаткова інформація"].str.extract(r"Від:\s*(.+)")
@@ -73,7 +74,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logging.exception("Помилка при обробці файлу")
-        await update.message.reply_text("❌ Виникла помилка при обробці файлу. Перевірте його структуру.")
+        await update.message.reply_text("❌ Виникла помилка при обробці файлу. Перевірте його структуру або формат.")
 
 
 # Handle any other message
