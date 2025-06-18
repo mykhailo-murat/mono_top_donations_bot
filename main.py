@@ -16,6 +16,9 @@ TOKEN = "7870393276:AAFJJMETllErbVSomsPgkcJur2xwvmDhutE"
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     document: Document = update.message.document
+    print("Отримано документ:", document.file_name)
+
+    await update.message.reply_text(f"Отримано файл: {document.file_name}")
 
     if not document.file_name.endswith(".csv"):
         await update.message.reply_text("Будь ласка, надішліть файл у форматі CSV.")
@@ -55,12 +58,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(
-        MessageHandler(
-            filters.Document.ALL & filters.Regex(r"\.csv$"),
-            handle_document
-        )
-    )
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 
     print("Бот запущено...")
     app.run_polling()
