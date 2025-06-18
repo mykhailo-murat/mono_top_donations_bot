@@ -8,8 +8,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from io import BytesIO, StringIO
-import csv
+from io import BytesIO
 
 # Logging setup
 logging.basicConfig(
@@ -26,26 +25,25 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_content = await file.download_as_bytearray()
 
     try:
+        # Estimate skipped lines by comparing total lines to parsed rows
         decoded = file_content.decode("utf-8")
-        lines = decoded.splitlines()
-        good_lines = []
-        bad_lines = []
+        total_lines = decoded.count("\n")
 
-        reader = csv.reader(lines, quotechar='"', escapechar='\\')
-        for i, row in enumerate(reader, start=1):
-            if len(row) == 8:
-                good_lines.append(row)
-            else:
-                bad_lines.append((i, lines[i-1]))
+        df = pd.read_csv(
+            BytesIO(file_content),
+            quotechar='"',
+            escapechar='\\',
+            on_bad_lines='warn'
+        )
 
-        df = pd.DataFrame(good_lines[1:], columns=good_lines[0])
+        skipped_rows = total_lines - len(df)
 
         df = df[df["Додаткова інформація"].str.contains("Від:", na=False)].copy()
         df["Донатор"] = df["Додаткова інформація"].str.extract(r"Від:\s*(.+)")
 
+        df["Сума"] = df["Сума"].astype(float)
         summary = (
             df.groupby("Донатор")["Сума"]
-            .astype(float)
             .agg(['sum', 'count'])
             .sort_values(by="sum", ascending=False)
         )
@@ -56,18 +54,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for idx, row in summary.iterrows():
             text += f"<b>{idx+1}. {row['Ім’я']}</b> — {row['Сума (грн)']} грн ({row['Кількість поповнень']} разів)\n"
 
-        if bad_lines:
-            text += f"\n⚠️ Пропущено {len(bad_lines)} рядків через помилки структури:\n"
-            preview = '\n'.join([f"{i}: {line}" for i, line in bad_lines[:5]])
-            text += preview
-            if len(bad_lines) > 5:
-                text += f"\n...та ще {len(bad_lines) - 5} рядків."
-
-            # Додаємо як текстовий файл усі погані рядки
-            bad_output = '\n'.join([f"{i}: {line}" for i, line in bad_lines])
-            bad_file = BytesIO(bad_output.encode("utf-8"))
-            bad_file.name = "bad_rows.txt"
-            await update.message.reply_document(document=InputFile(bad_file))
+        if skipped_rows > 0:
+            text += f"\n⚠️ Пропущено рядків через помилки: {skipped_rows}\n"
 
         await update.message.reply_text(text, parse_mode='HTML')
 
