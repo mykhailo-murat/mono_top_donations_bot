@@ -1,7 +1,7 @@
 # main.py
 import logging
 import pandas as pd
-from telegram import Update, Document, InputFile
+from telegram import Update, Document
 from telegram.ext import (
     ApplicationBuilder,
     MessageHandler,
@@ -25,9 +25,19 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_content = await file.download_as_bytearray()
 
     try:
-        # Estimate skipped lines by comparing total lines to parsed rows
         decoded = file_content.decode("utf-8")
-        total_lines = decoded.count("\n")
+        lines = decoded.splitlines()
+
+        # Виділяємо заголовок окремо
+        header = lines[0]
+        expected_columns = header.count(',') + 1
+
+        bad_donations = []
+
+        for i, line in enumerate(lines[1:], start=2):
+            if line.count(',') + 1 != expected_columns:
+                if 'Від:' in line:
+                    bad_donations.append(f"{i}: {line}")
 
         df = pd.read_csv(
             BytesIO(file_content),
@@ -35,8 +45,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             escapechar='\\',
             on_bad_lines='warn'
         )
-
-        skipped_rows = total_lines - len(df)
 
         df = df[df["Додаткова інформація"].str.contains("Від:", na=False)].copy()
         df["Донатор"] = df["Додаткова інформація"].str.extract(r"Від:\s*(.+)")
@@ -54,8 +62,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for idx, row in summary.iterrows():
             text += f"<b>{idx+1}. {row['Ім’я']}</b> — {row['Сума (грн)']} грн ({row['Кількість поповнень']} разів)\n"
 
-        if skipped_rows > 0:
-            text += f"\n⚠️ Пропущено рядків через помилки: {skipped_rows}\n"
+        if bad_donations:
+            text += f"\n⚠️ Пропущено {len(bad_donations)} рядків з 'Від:' через помилки структури:\n"
+            preview = '\n'.join(bad_donations[:5])
+            text += preview
+            if len(bad_donations) > 5:
+                text += f"\n...та ще {len(bad_donations) - 5} рядків."
 
         await update.message.reply_text(text, parse_mode='HTML')
 
